@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Spinner?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.effect.Glow?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.Pane?>
+<?import javafx.scene.text.Font?>
+
+<AnchorPane fx:id="TabPane" maxHeight="-Infinity" maxWidth="-Infinity" minHeight="-Infinity" minWidth="-Infinity" prefHeight="600.0" prefWidth="1000.0" xmlns="http://javafx.com/javafx/25" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.example.women_shop.ShopController">
+   <children>
+      <Pane  layoutX="14.0" layoutY="14.0" prefHeight="573.0" prefWidth="977.0" style="-fx-background-color: #A1A6B3;" AnchorPane.bottomAnchor="13.0" AnchorPane.leftAnchor="14.0" AnchorPane.rightAnchor="9.0" AnchorPane.topAnchor="14.0">
+         <children>
+            <TableView fx:id="table_List" layoutX="15.0" layoutY="13.0" prefHeight="325.0" prefWidth="573.0">
+              <columns>
+                <TableColumn fx:id="colId" prefWidth="24.0" text="#" />
+                <TableColumn fx:id="colName" prefWidth="86.0" text="Name" />
+                  <TableColumn fx:id="colCategory" prefWidth="70.0" text="Category" />
+                  <TableColumn fx:id="colType" prefWidth="59.0" text="Type" />
+                  <TableColumn fx:id="colColor" prefWidth="54.0" text="Color" />
+                  <TableColumn fx:id="colSize" prefWidth="42.0" text="Size" />
+                  <TableColumn fx:id="colQuan" prefWidth="59.0" text="Quantity" />
+                  <TableColumn fx:id="colCond" prefWidth="63.0" text="Condition" />
+                  <TableColumn fx:id="colPrice" prefWidth="50.0" text="Price" />
+                  <TableColumn fx:id="colStatus" prefWidth="62.0" text="Status" />
+              </columns>
+            </TableView>
+            <Label fx:id="label_Cat" layoutX="29.0" layoutY="374.0" prefHeight="27.0" prefWidth="117.0" text="Category">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Label>
+            <ComboBox fx:id="box_Cat" layoutX="153.0" layoutY="369.0" prefHeight="37.0" prefWidth="152.0" promptText="Choose" />
+            <TextField fx:id="input_Name" layoutX="153.0" layoutY="417.0" prefHeight="37.0" prefWidth="152.0">
+               <effect>
+                  <Glow level="0.64" />
+               </effect>
+            </TextField>
+            <Label fx:id="label_Name" layoutX="31.0" layoutY="427.0" prefHeight="27.0" prefWidth="61.0" text="Name">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Label>
+            <Label fx:id="label_Color" layoutX="29.0" layoutY="523.0" prefHeight="20.0" prefWidth="52.0" text="Color">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Label>
+            <Label fx:id="label_Size" layoutX="325.0" layoutY="375.0" prefHeight="20.0" prefWidth="52.0" text="Size">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Label>
+            <TextField fx:id="input_Color" layoutX="153.0" layoutY="517.0" prefHeight="37.0" prefWidth="152.0" />
+            <TextField fx:id="input_Size" layoutX="413.0" layoutY="369.0" prefHeight="37.0" prefWidth="152.0" />
+            <Label fx:id="label_Price" layoutX="325.0" layoutY="523.0" prefHeight="20.0" prefWidth="46.0" text="Price">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Label>
+            <TextField fx:id="input_Price" layoutX="413.0" layoutY="517.0" prefHeight="37.0" prefWidth="152.0" />
+            <Label fx:id="label_Quan" layoutX="325.0" layoutY="427.0" prefHeight="27.0" prefWidth="85.0" text="Quantity">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Label>
+            <TextField fx:id="input_Quan" layoutX="413.0" layoutY="418.0" prefHeight="37.0" prefWidth="152.0" />
+            <Label fx:id="label_Type" layoutX="31.0" layoutY="474.0" prefHeight="20.0" prefWidth="61.0" text="Type">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Label>
+            <TextField fx:id="input_Type" layoutX="153.0" layoutY="468.0" prefHeight="37.0" prefWidth="152.0" />
+            <Label fx:id="label_Cond" layoutX="325.0" layoutY="474.0" prefHeight="20.0" prefWidth="70.0" text="Condition">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Label>
+            <TextField fx:id="input_Cond" layoutX="413.0" layoutY="468.0" prefHeight="37.0" prefWidth="152.0" />
+            <Button fx:id="but_Add" layoutX="610.0" layoutY="502.0" mnemonicParsing="false" prefHeight="54.0" prefWidth="162.0" text="Add">
+               <font>
+                  <Font size="18.0" />
+               </font></Button>
+            <Button fx:id="but_Reset" layoutX="794.0" layoutY="501.0" mnemonicParsing="false" prefHeight="54.0" prefWidth="169.0" text="Reset">
+               <font>
+                  <Font size="18.0" />
+               </font></Button>
+            <Button fx:id="but_Modify" layoutX="610.0" layoutY="435.0" mnemonicParsing="false" prefHeight="54.0" prefWidth="162.0" text="Modify">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Button>
+            <Button fx:id="but_Delete" layoutX="794.0" layoutY="435.0" mnemonicParsing="false" prefHeight="54.0" prefWidth="169.0" text="Delete">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Button>
+            <Button fx:id="but_Purchase" layoutX="610.0" layoutY="370.0" mnemonicParsing="false" prefHeight="54.0" prefWidth="162.0" text="Purchase">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Button>
+            <Button fx:id="but_Confirm" layoutX="794.0" layoutY="370.0" mnemonicParsing="false" prefHeight="54.0" prefWidth="169.0" text="Confirm">
+               <font>
+                  <Font size="16.0" />
+               </font>
+            </Button>
+            <TabPane fx:id="TabPane" layoutX="595.0" layoutY="13.0" prefHeight="325.0" prefWidth="368.0" tabClosingPolicy="UNAVAILABLE">
+              <tabs>
+                <Tab text="Untitled Tab 1">
+                  <content>
+                    <AnchorPane minHeight="0.0" minWidth="0.0" prefHeight="180.0" prefWidth="200.0" style="-fx-background-color: #43464B;" />
+                  </content>
+                </Tab>
+                <Tab text="Untitled Tab 2">
+                  <content>
+                    <AnchorPane fx:id="checkoutPane" minHeight="0.0" minWidth="0.0" prefHeight="170.0" prefWidth="368.0" style="-fx-background-color: #43464B;">
+                           <children>
+                              <Spinner fx:id="spin_PurchaseQuan" layoutX="34.0" layoutY="205.0" prefHeight="0.0" prefWidth="52.0" />
+                              <ComboBox fx:id="box_Discount" layoutX="34.0" layoutY="246.0" prefHeight="25.0" prefWidth="107.0" />
+                              <Label fx:id="label_Total" layoutX="205.0" layoutY="238.0" text="Total" textFill="WHITE" />
+                              <Label fx:id="label_Subtotal" layoutX="280.0" layoutY="238.0" text="Sub total" textFill="WHITE" />
+                           </children>
+                        </AnchorPane>
+                  </content>
+                </Tab>
+              </tabs>
+            </TabPane>
+         </children>
+      </Pane>
+   </children>
+</AnchorPane>
