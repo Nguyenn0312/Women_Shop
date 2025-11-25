@@ -6,19 +6,24 @@ import javafx.fxml.FXML;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.AnchorPane;
-import javafx.application.Platform;
-import javafx.concurrent.Task;
 
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Optional;
 
 public class ShopController {
 
+    // Using DAO to isolate DB logic
+    private final ProductDAO productDAO = new ProductDAO();
+    private final ObservableList<Product> items = FXCollections.observableArrayList();
 
+    // ================== FXML Controls ==================
+
+    // Main containers and controls
     @FXML private ComboBox<String> box_Cat;
+    @FXML private TabPane tabPane;
+    @FXML private AnchorPane checkoutPane;
 
+    // CRUD and Transaction Buttons
     @FXML private Button but_Add;
     @FXML private Button but_Reset;
     @FXML private Button but_Modify;
@@ -26,384 +31,411 @@ public class ShopController {
     @FXML private Button but_Purchase;
     @FXML private Button but_Confirm;
 
-    @FXML private TabPane tabPane;
-    @FXML private AnchorPane checkoutPane;
-    @FXML private ComboBox<String> box_Discount;
+    // Discount management buttons (Requirement 7)
+    @FXML private Button but_ApplyDiscounts;
+    @FXML private Button but_ClearDiscounts;
+
+    // Input Fields for Add/Modify
+    @FXML private TextField input_Name;
+    @FXML private TextField input_PurchasePrice;
+    @FXML private TextField input_SalePrice;
+    @FXML private TextField input_Size;
+    @FXML private TextField input_Quan;          // Stock (Read-only)
+
+    // Controls for Checkout tab
     @FXML private Spinner<Integer> spin_PurchaseQuan;
+    @FXML private ComboBox<String> box_Discount; // Discount for the transaction
+    @FXML private ComboBox<String> box_TransactionType; // NEW: Buy/Sell Choice
     @FXML private Label label_Subtotal;
     @FXML private Label label_Total;
 
+    // TableView Columns (must match Product properties)
+    @FXML private TableView<Product> table_List;
+    @FXML private TableColumn<Product, Integer> colId;
+    @FXML private TableColumn<Product, String> colName;
+    @FXML private TableColumn<Product, String> colCategory;
+    @FXML private TableColumn<Product, String> colSize;
+    @FXML private TableColumn<Product, Integer> colQuan;
+    @FXML private TableColumn<Product, Double> colSalePrice;
+    @FXML private TableColumn<Product, Double> colDiscountPrice;
+    @FXML private TableColumn<Product, String> colStatus;
 
-    @FXML private TextField input_Color;
-    @FXML private TextField input_Cond;
-    @FXML private TextField input_Name;
-    @FXML private TextField input_Price;
-    @FXML private TextField input_Quan;
-    @FXML private TextField input_Size;
-    @FXML private TextField input_Type;
+    // Labels for statistics
+    @FXML private Label labelInitialCapital;
+    @FXML private Label labelCapital;
+    @FXML private Label labelIncomes;
+    @FXML private Label labelCosts;
 
-    @FXML private TableView<Clothes> table_List;
-
-    @FXML private TableColumn<Clothes, String> colId;
-    @FXML private TableColumn<Clothes, String> colName;
-    @FXML private TableColumn<Clothes, String> colCategory;
-    @FXML private TableColumn<Clothes, String> colType;
-    @FXML private TableColumn<Clothes, String> colColor;
-    @FXML private TableColumn<Clothes, String> colSize;
-    @FXML private TableColumn<Clothes, String> colCond;
-    @FXML private TableColumn<Clothes, Integer> colQuan;
-    @FXML private TableColumn<Clothes, Double> colPrice;
-    @FXML private TableColumn<Clothes, Double> colStatus;
-
-    private final ObservableList<Clothes> items = FXCollections.observableArrayList();
+    // ================== INITIALIZATION ==================
 
     @FXML
     public void initialize() {
-        System.out.println("ShopController.initialize() called: " + this);
+        // Initialize Category ComboBox
+        box_Cat.getItems().addAll("Clothing", "Shoes", "Accessory");
 
-        // ComboBox values
-        box_Cat.setItems(FXCollections.observableArrayList("Clothes", "Shoes", "Accessory"));
-        box_Discount.setItems(FXCollections.observableArrayList("0%","30%", "20%", "50%"));
+        // Initialize Spinner for quantity (Buy/Sell)
+        spin_PurchaseQuan.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 1000, 1));
 
-        // spinner defaults and bounds (min 1)
-        SpinnerValueFactory.IntegerSpinnerValueFactory svf =
-                new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 999, 1);
-        spin_PurchaseQuan.setValueFactory(svf);
+        // Initialize Discount ComboBox
+        box_Discount.getItems().addAll("0%", "30%", "50%");
+        box_Discount.getSelectionModel().selectFirst();
 
+        // NEW: Initialize transaction type
+        box_TransactionType.getItems().addAll("SELL", "BUY"); // Simple English terms
+        box_TransactionType.getSelectionModel().selectFirst();
 
-
-        // Table column bindings (PropertyValueFactory uses getters in Clothes)
+        // Setup cell value factories
         colId.setCellValueFactory(new PropertyValueFactory<>("id"));
         colName.setCellValueFactory(new PropertyValueFactory<>("name"));
         colCategory.setCellValueFactory(new PropertyValueFactory<>("category"));
-        colType.setCellValueFactory(new PropertyValueFactory<>("type"));
-        colColor.setCellValueFactory(new PropertyValueFactory<>("color"));
-        colSize.setCellValueFactory(new PropertyValueFactory<>("size"));
-        colCond.setCellValueFactory(new PropertyValueFactory<>("condition"));
+        colSize.setCellValueFactory(new PropertyValueFactory<>("sizeString"));
         colQuan.setCellValueFactory(new PropertyValueFactory<>("quantity"));
-        colPrice.setCellValueFactory(new PropertyValueFactory<>("price"));
+        colSalePrice.setCellValueFactory(new PropertyValueFactory<>("salePrice"));
+        colDiscountPrice.setCellValueFactory(new PropertyValueFactory<>("discountPrice"));
         colStatus.setCellValueFactory(new PropertyValueFactory<>("status"));
 
         table_List.setItems(items);
 
-        // Load DB data
+        // 1. Initial data and stats loading
         loadData();
+        refreshStats();
 
-        // Button handlers
-        but_Add.setOnAction(e -> handleAdd());
-        but_Reset.setOnAction(e -> handleReset());
+        // 2. Button Events
+        but_Add.setOnAction(event -> handleAdd());
+        but_Modify.setOnAction(event -> handleModify());
+        but_Delete.setOnAction(event -> handleDelete());
+        but_Reset.setOnAction(event -> handleReset());
+        but_Confirm.setOnAction(event -> handleConfirm());
+        but_Purchase.setOnAction(event -> handlePurchase());
+        but_ApplyDiscounts.setOnAction(event -> handleApplyDiscounts());
+        but_ClearDiscounts.setOnAction(event -> handleClearDiscounts());
 
-        // handlers for new buttons
-        but_Modify.setOnAction(e -> handleModify());
-        but_Delete.setOnAction(e -> handleDelete());
-        but_Purchase.setOnAction(e -> handlePurchase());
-        but_Confirm.setOnAction(e -> handleConfirm());
+        // 3. Row selection handler (for modify/transaction)
+        table_List.getSelectionModel().selectedItemProperty().addListener((obs, oldSel, newSel) -> {
+            if (newSel != null) {
+                fillForm(newSel);
+                calculateSubTotal(newSel); // Recalculate totals for transaction
+            } else {
+                handleReset();
+            }
+        });
+
+        // 4. Quantity/Discount/Type change handler in transaction tab
+        spin_PurchaseQuan.valueProperty().addListener((obs, oldVal, newVal) -> {
+            Product selected = table_List.getSelectionModel().getSelectedItem();
+            if (selected != null) calculateSubTotal(selected);
+        });
+        box_Discount.valueProperty().addListener((obs, oldVal, newVal) -> {
+            Product selected = table_List.getSelectionModel().getSelectedItem();
+            if (selected != null) calculateSubTotal(selected);
+        });
+        box_TransactionType.valueProperty().addListener((obs, oldVal, newVal) -> {
+            Product selected = table_List.getSelectionModel().getSelectedItem();
+            if (selected != null) calculateSubTotal(selected);
+        });
 
 
+        // 5. Make quantity field non-editable
+        input_Quan.setDisable(true);
+
+        // Display initial capital
+        labelInitialCapital.setText("Initial Capital: " + String.format("%.2f €", productDAO.getInitialCapital()));
     }
 
+    // ================== DATA LOADING ==================
+
     private void loadData() {
-        System.out.println("loadData() start");
-        String sql = "SELECT * FROM clothes";
-
-        Connection conn = DBConnect.connect();
-        if (conn == null) {
-            showAlert(Alert.AlertType.ERROR, "Database Error", "Could not connect to DB. See console.");
-            return;
+        try {
+            items.setAll(productDAO.loadAllProducts());
+        } catch (SQLException e) {
+            showAlert(Alert.AlertType.ERROR, "Database Error", "Failed to load products: " + e.getMessage());
         }
+    }
 
-        try (PreparedStatement stmt = conn.prepareStatement(sql);
-             ResultSet rs = stmt.executeQuery()) {
+    private void fillForm(Product p) {
+        input_Name.setText(p.getName());
+        input_PurchasePrice.setText(String.valueOf(p.getPurchasePrice()));
+        input_SalePrice.setText(String.valueOf(p.getSalePrice()));
+        input_Quan.setText(String.valueOf(p.getQuantity()));
+        box_Cat.setValue(p.getCategory());
 
-            items.clear();
-            while (rs.next()) {
-                Clothes c = new Clothes(
-                        rs.getInt("idClothes"),
-                        rs.getString("product_Name"),
-                        rs.getString("product_Category"),
-                        rs.getString("product_Type"),
-                        rs.getString("product_Color"),
-                        rs.getString("product_Size"),
-                        rs.getInt("product_Quantity"),
-                        rs.getString("product_Condition"),
-                        rs.getDouble("product_Price"),
-                        rs.getString("product_Status")
-                );
-                items.add(c);
+        // Size is specific to shoes and clothing
+        if (p instanceof Clothing clothing) {
+            input_Size.setText(String.valueOf(clothing.getSize()));
+        } else if (p instanceof Shoes shoes) {
+            input_Size.setText(String.valueOf(shoes.getSize()));
+        } else {
+            input_Size.setText("");
+        }
+    }
+
+    private void handleReset() {
+        input_Name.clear();
+        input_PurchasePrice.clear();
+        input_SalePrice.clear();
+        input_Size.clear();
+        input_Quan.clear();
+        box_Cat.getSelectionModel().clearSelection();
+        table_List.getSelectionModel().clearSelection();
+    }
+
+    // ================== CRUD (Requirements 4 & 12) ==================
+
+    private void handleAdd() {
+        try {
+            String name = input_Name.getText();
+            double purchasePrice = Double.parseDouble(input_PurchasePrice.getText());
+            double salePrice = Double.parseDouble(input_SalePrice.getText());
+            String category = box_Cat.getValue();
+            String sizeInput = input_Size.getText();
+
+            if (name.isEmpty() || category == null || input_PurchasePrice.getText().isEmpty() || input_SalePrice.getText().isEmpty()) {
+                showAlert(Alert.AlertType.WARNING, "Input Error", "Please fill all mandatory fields (Name, Prices, Category).");
+                return;
             }
-            System.out.println("Loaded items: " + items.size());
-        } catch (Exception e) {
-            e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "Database Error", "Failed to load data. See console.");
-        } finally {
-            try { conn.close(); } catch (Exception ignored) {}
+
+            // Create a temporary object to validate data according to model rules
+            Product newProduct = switch (category) {
+                case "Clothing" -> new Clothing(0, name, purchasePrice, salePrice, 0, 0, "Soldout", Integer.parseInt(sizeInput));
+                case "Shoes" -> new Shoes(0, name, purchasePrice, salePrice, 0, 0, "Soldout", Integer.parseInt(sizeInput));
+                case "Accessory" -> new Accessory(0, name, purchasePrice, salePrice, 0, 0, "Soldout");
+                default -> throw new IllegalArgumentException("Unknown category.");
+            };
+
+            // The DAO inserts the product, assigns the ID and initial state (Stock 0, Status Soldout)
+            productDAO.addProduct(newProduct, category, sizeInput);
+
+            loadData();
+            handleReset();
+            showAlert(Alert.AlertType.INFORMATION, "Success", "Product added successfully.");
+        } catch (NumberFormatException e) {
+            showAlert(Alert.AlertType.ERROR, "Format Error", "Prices and size must be numbers.");
+        } catch (IllegalArgumentException e) {
+            showAlert(Alert.AlertType.ERROR, "Validation Error", e.getMessage());
+        } catch (SQLException e) {
+            showAlert(Alert.AlertType.ERROR, "DB Error", "Error while adding: " + e.getMessage());
         }
     }
 
     private void handleModify() {
-        Clothes selected = table_List.getSelectionModel().getSelectedItem();
+        Product selected = table_List.getSelectionModel().getSelectedItem();
         if (selected == null) {
-            showAlert(Alert.AlertType.WARNING, "Modify", "Select a product first.");
-            return;
-        }
-        // gather new values from input fields
-        String category = box_Cat.getValue();
-        String name = input_Name.getText().trim();
-        String type = input_Type.getText().trim();
-        String color = input_Color.getText().trim();
-        String size = input_Size.getText().trim();
-        String condition = input_Cond.getText().trim();
-        int quantity;
-        double price;
-        try {
-            quantity = Integer.parseInt(input_Quan.getText().trim());
-            price = Double.parseDouble(input_Price.getText().trim());
-        } catch (Exception ex) {
-            showAlert(Alert.AlertType.WARNING, "Modify", "Quantity/Price invalid.");
+            showAlert(Alert.AlertType.WARNING, "Selection Required", "Please select a product to modify.");
             return;
         }
 
-        String sql = "UPDATE clothes SET product_Name=?, product_Category=?, product_Type=?, product_Color=?, product_Size=?, product_Quantity=?, product_Condition=?, product_Price=? WHERE idClothes=?";
-        Connection conn = DBConnect.connect();
-        if (conn == null) { showAlert(Alert.AlertType.ERROR, "DB", "No connection"); return; }
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, name);
-            ps.setString(2, category);
-            ps.setString(3, type);
-            ps.setString(4, color);
-            ps.setString(5, size);
-            ps.setInt(6, quantity);
-            ps.setString(7, condition);
-            ps.setDouble(8, price);
-            ps.setInt(9, selected.getId());
-            int affected = ps.executeUpdate();
-            if (affected > 0) {
-                loadData(); // reload authoritative data
-                showAlert(Alert.AlertType.INFORMATION, "Modify", "Product updated.");
-            } else {
-                showAlert(Alert.AlertType.ERROR, "Modify", "No rows updated.");
+        try {
+            String name = input_Name.getText();
+            double purchasePrice = Double.parseDouble(input_PurchasePrice.getText());
+            double salePrice = Double.parseDouble(input_SalePrice.getText());
+            String sizeInput = input_Size.getText();
+            String category = selected.getCategory();
+
+            // Update the selected Java object for validation
+            selected.setName(name);
+            selected.setPurchasePrice(purchasePrice);
+            selected.setSalePrice(salePrice);
+
+            if (selected instanceof Clothing clothing) {
+                clothing.setSize(Integer.parseInt(sizeInput));
+            } else if (selected instanceof Shoes shoes) {
+                shoes.setSize(Integer.parseInt(sizeInput));
             }
-        } catch (Exception ex) { ex.printStackTrace(); showAlert(Alert.AlertType.ERROR, "Modify", "Error. See console."); }
-        finally { try { conn.close(); } catch (Exception ignored) {} }
+
+            // The DAO updates the Name, Purchase Price, Sale Price and Size/Material fields in the DB
+            productDAO.updateProduct(selected, category, sizeInput);
+
+            loadData();
+            showAlert(Alert.AlertType.INFORMATION, "Success", "Product modified successfully.");
+        } catch (NumberFormatException e) {
+            showAlert(Alert.AlertType.ERROR, "Format Error", "Prices and size must be numbers.");
+        } catch (IllegalArgumentException e) {
+            showAlert(Alert.AlertType.ERROR, "Validation Error", e.getMessage());
+        } catch (SQLException e) {
+            showAlert(Alert.AlertType.ERROR, "DB Error", "Error while modifying: " + e.getMessage());
+        }
     }
 
     private void handleDelete() {
-        Clothes selected = table_List.getSelectionModel().getSelectedItem();
-        if (selected == null) { showAlert(Alert.AlertType.WARNING, "Delete", "Select a product first."); return; }
-        // Optional: confirm deletion via dialog
-        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION, "Delete selected product?", ButtonType.YES, ButtonType.NO);
-        confirm.setHeaderText(null);
-        if (confirm.showAndWait().orElse(ButtonType.NO) != ButtonType.YES) return;
+        Product selected = table_List.getSelectionModel().getSelectedItem();
+        if (selected == null) {
+            showAlert(Alert.AlertType.WARNING, "Selection Required", "Please select a product to delete.");
+            return;
+        }
 
-        String sql = "DELETE FROM clothes WHERE idClothes=?";
-        Connection conn = DBConnect.connect();
-        if (conn == null) { showAlert(Alert.AlertType.ERROR, "DB", "No connection"); return; }
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, selected.getId());
-            int affected = ps.executeUpdate();
-            if (affected > 0) {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Deletion Confirmation");
+        confirm.setHeaderText("Delete product " + selected.getName() + " ?");
+        confirm.setContentText("This action is irreversible.");
+        Optional<ButtonType> result = confirm.showAndWait();
+
+        if (result.isPresent() && result.get() == ButtonType.OK) {
+            try {
+                // The DAO checks the stock before deleting (Requirement 3)
+                productDAO.deleteProduct(selected.getId());
                 loadData();
-                showAlert(Alert.AlertType.INFORMATION, "Delete", "Product deleted.");
-            } else {
-                showAlert(Alert.AlertType.ERROR, "Delete", "No rows deleted.");
+                handleReset();
+                showAlert(Alert.AlertType.INFORMATION, "Success", "Product deleted.");
+            } catch (IllegalStateException e) {
+                showAlert(Alert.AlertType.ERROR, "Error", e.getMessage()); // Stock > 0 message
+            } catch (SQLException e) {
+                showAlert(Alert.AlertType.ERROR, "DB Error", "Error while deleting: " + e.getMessage());
             }
-        } catch (Exception ex) { ex.printStackTrace(); showAlert(Alert.AlertType.ERROR, "Delete", "Error. See console."); }
-        finally { try { conn.close(); } catch (Exception ignored) {} }
+        }
     }
+
+    // ================== TRANSACTIONS (Requirement 6) ==================
+
+    // Opens the transaction tab
     private void handlePurchase() {
-        Clothes selected = table_List.getSelectionModel().getSelectedItem();
-        if (selected == null) { showAlert(Alert.AlertType.WARNING, "Purchase", "Select a product first."); return; }
-
-        // set default purchase quantity to 1 and max to selected quantity
-        int available = selected.getQuantity();
-        SpinnerValueFactory.IntegerSpinnerValueFactory svf =
-                new SpinnerValueFactory.IntegerSpinnerValueFactory(1, Math.max(1, available), 1);
-        spin_PurchaseQuan.setValueFactory(svf);
-
-        // set default discount
-        box_Discount.setValue("0%"); // or choose none; you populated earlier with 30/20/50, you can add "0%"
-        // show selected price in subtotal
-        label_Subtotal.setText(String.format("Subtotal: %.2f", selected.getPrice()));
-        label_Total.setText(String.format("Total: %.2f", selected.getPrice()));
-
-        // switch to checkout tab (index 1) — assumes second tab is checkout
-        tabPane.getSelectionModel().select(1);
+        if (table_List.getSelectionModel().getSelectedItem() == null) {
+            showAlert(Alert.AlertType.WARNING, "Selection Required", "Please select a product for the transaction.");
+            return;
+        }
+        tabPane.getSelectionModel().select(1); // Selects the Checkout tab
     }
 
+    // Calculates and displays subtotal and total in the transaction tab
+    private void calculateSubTotal(Product p) {
+        int quantity = spin_PurchaseQuan.getValue();
+        String transactionType = box_TransactionType.getValue();
+
+        double effectivePrice;
+        if (transactionType != null && transactionType.startsWith("BUY")) {
+            // For purchase (BUY), use the purchase price
+            effectivePrice = p.getPurchasePrice();
+        } else {
+            // For sale (SELL), use the effective sale price (with fixed discount if > 0)
+            effectivePrice = p.getEffectiveSalePrice();
+
+            // Apply manual discount (for the exercise)
+            double reduction = switch (box_Discount.getValue()) {
+                case "30%" -> 0.70;
+                case "50%" -> 0.50;
+                default -> 1.00;
+            };
+            effectivePrice *= reduction;
+        }
+
+        double total = effectivePrice * quantity;
+
+        label_Subtotal.setText(String.format("Unit Price: %.2f €", effectivePrice));
+        label_Total.setText(String.format("Total: %.2f €", total));
+    }
+
+    // Confirms BUY or SELL
     private void handleConfirm() {
-        Clothes selected = table_List.getSelectionModel().getSelectedItem();
-        if (selected == null) { showAlert(Alert.AlertType.WARNING, "Confirm", "Select a product first."); return; }
+        Product selected = table_List.getSelectionModel().getSelectedItem();
+        if (selected == null) return;
 
-        int buyQty = spin_PurchaseQuan.getValue();
-        if (buyQty <= 0) { showAlert(Alert.AlertType.WARNING, "Confirm", "Invalid quantity."); return; }
-
-        int currentQty = selected.getQuantity();
-        if (buyQty > currentQty) { showAlert(Alert.AlertType.WARNING, "Confirm", "Not enough stock."); return; }
-
-        // compute discount
-        String discStr = box_Discount.getValue();
-        double discount = 0.0;
-        if (discStr != null && discStr.endsWith("%")) {
-            try { discount = Double.parseDouble(discStr.replace("%","")) / 100.0; } catch (Exception ignored) {}
+        String transactionType = box_TransactionType.getValue();
+        if (transactionType == null) {
+            showAlert(Alert.AlertType.WARNING, "Selection Required", "Please choose the transaction type (Buy or Sell).");
+            return;
         }
 
-        double subtotal = selected.getPrice() * buyQty;
-        double total = subtotal * (1.0 - discount);
-        label_Subtotal.setText(String.format("Subtotal: %.2f", subtotal));
-        label_Total.setText(String.format("Total: %.2f", total));
-
-        // update DB: reduce quantity or set Soldout
-        int newQty = currentQty - buyQty;
-        String newStatus = newQty <= 0 ? "Soldout" : selected.getStatus();
-
-        String sql = "UPDATE clothes SET product_Quantity=?, product_Status=? WHERE idClothes=?";
-        Connection conn = DBConnect.connect();
-        if (conn == null) { showAlert(Alert.AlertType.ERROR, "DB", "No connection"); return; }
+        int quantity = spin_PurchaseQuan.getValue();
+        if (quantity <= 0) {
+            showAlert(Alert.AlertType.WARNING, "Invalid Quantity", "Quantity must be greater than zero.");
+            return;
+        }
 
         try {
-            // Use transaction if you will do further writes like orders table
-            conn.setAutoCommit(false);
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1, newQty);
-                ps.setString(2, newQty <= 0 ? "Soldout" : selected.getStatus());
-                ps.setInt(3, selected.getId());
-                int affected = ps.executeUpdate();
-                if (affected > 0) {
-                    conn.commit();
-                    loadData();
-                    showAlert(Alert.AlertType.INFORMATION, "Purchase", "Purchase completed. Total: " + String.format("%.2f", total));
-                    tabPane.getSelectionModel().select(0); // go back to product tab
-                } else {
-                    conn.rollback();
-                    showAlert(Alert.AlertType.ERROR, "Purchase", "Purchase failed.");
+            // Price and manual discount logic
+            double buyPrice = selected.getPurchasePrice();
+            double sellPrice = selected.getEffectiveSalePrice() * switch (box_Discount.getValue()) {
+                case "30%" -> 0.70;
+                case "50%" -> 0.50;
+                default -> 1.00;
+            };
+
+            if (transactionType.startsWith("BUY")) {
+                // BUY LOGIC - Requirement 6 & 5
+                double totalCost = buyPrice * quantity;
+                double income = productDAO.calculateIncome();
+                double cost = productDAO.calculateCost();
+                double currentCapital = productDAO.calculateCapital(income, cost);
+
+                // Requirement 5: Budget check
+                if (totalCost > currentCapital) {
+                    showAlert(Alert.AlertType.ERROR, "Budget Error (Requirement 5)", "Insufficient funds. Total cost: " + String.format("%.2f €", totalCost) + " > Current capital: " + String.format("%.2f €", currentCapital));
+                    return;
                 }
-            } catch (Exception ex) {
-                conn.rollback();
-                throw ex;
-            } finally {
-                conn.setAutoCommit(true);
-            }
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "Purchase", "Error. See console.");
-        } finally {
-            try { conn.close(); } catch (Exception ignored) {}
-        }
-    }
 
-    private void handleAdd() {
-        // Basic validation
-        String category = box_Cat.getValue();
-        String name = input_Name.getText().trim();
-        String type = input_Type.getText().trim();
-        String color = input_Color.getText().trim();
-        String size = input_Size.getText().trim();
-        String condition = input_Cond.getText().trim();
-        String quanText = input_Quan.getText().trim();
-        String priceText = input_Price.getText().trim();
+                productDAO.recordTransaction(selected.getId(), "BUY", quantity, buyPrice);
+                showAlert(Alert.AlertType.INFORMATION, "Purchase", "Purchase successful. Cost: " + String.format("%.2f €", totalCost));
 
-        if (category == null || category.isEmpty() || name.isEmpty()) {
-            showAlert(Alert.AlertType.WARNING, "Validation Error", "Category and Name are required.");
-            return;
-        }
-
-        int quantity;
-        double price;
-        try {
-            quantity = Integer.parseInt(quanText.isEmpty() ? "0" : quanText);
-        } catch (NumberFormatException ex) {
-            showAlert(Alert.AlertType.WARNING, "Validation Error", "Quantity must be an integer.");
-            return;
-        }
-
-        try {
-            price = Double.parseDouble(priceText.isEmpty() ? "0" : priceText);
-        } catch (NumberFormatException ex) {
-            showAlert(Alert.AlertType.WARNING, "Validation Error", "Price must be a number.");
-            return;
-        }
-
-        // Insert into database
-        String insertSql = "INSERT INTO clothes (product_Name, product_Category, product_Type, product_Color, product_Size, product_Quantity, product_Condition, product_Price, product_Status) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-        Connection conn = DBConnect.connect();
-        if (conn == null) {
-            showAlert(Alert.AlertType.ERROR, "Database Error", "Could not connect to DB. See console.");
-            return;
-        }
-
-        try (PreparedStatement pstmt = conn.prepareStatement(insertSql, PreparedStatement.RETURN_GENERATED_KEYS)) {
-            pstmt.setString(1, name);
-            pstmt.setString(2, category);
-            pstmt.setString(3, type);
-            pstmt.setString(4, color);
-            pstmt.setString(5, size);
-            pstmt.setInt(6, quantity);
-            pstmt.setString(7, condition);
-            pstmt.setDouble(8, price);
-            pstmt.setString(9, "Onstock");
-
-            int affected = pstmt.executeUpdate();
-            if (affected == 0) {
-                showAlert(Alert.AlertType.ERROR, "Insert Error", "No rows inserted.");
-                return;
-            }
-            loadData();      // reload UI from DB
-            handleReset();
-            showAlert(Alert.AlertType.INFORMATION, "Success", "Product added successfully.");
-
-            // Get generated id if needed
-            int newId = 0;
-            try (ResultSet keys = pstmt.getGeneratedKeys()) {
-                if (keys.next()) newId = keys.getInt(1);
+            } else if (transactionType.startsWith("SELL")) {
+                // SELL LOGIC - Requirement 6
+                // DAO and Trigger handle stock check
+                productDAO.recordTransaction(selected.getId(), "SELL", quantity, sellPrice);
+                showAlert(Alert.AlertType.INFORMATION, "Sale", "Sale successful. Income: " + String.format("%.2f €", sellPrice * quantity));
             }
 
-
-            // Optionally, instead of adding directly, you could call loadData() to reload everything:
-            // loadData();
-            //loadData();
-            //handleReset();
-            //showAlert(Alert.AlertType.INFORMATION, "Success", "Product added successfully.");
-
-            // Clear fields after successful insert
-            handleReset();
-
+        } catch (SQLException e) {
+            // DAO or Trigger returns stock error for sale
+            showAlert(Alert.AlertType.ERROR, "Transaction Error", e.getMessage());
         } catch (Exception e) {
-            e.printStackTrace();
-            showAlert(Alert.AlertType.ERROR, "Database Error", "Failed to insert data. See console.");
-        } finally {
-            try { conn.close(); } catch (Exception ignored) {}
+            showAlert(Alert.AlertType.ERROR, "System Error", "An unexpected error occurred: " + e.getMessage());
         }
 
+        loadData();
+        refreshStats();
+        tabPane.getSelectionModel().select(0); // Back to main tab
+    }
 
-        // when user selects a row, populate the input fields
-        table_List.getSelectionModel().selectedItemProperty().addListener((obs, oldSel, newSel) -> {
-            if (newSel != null) {
-                box_Cat.setValue(newSel.getCategory());
-                input_Name.setText(newSel.getName());
-                input_Type.setText(newSel.getType());
-                input_Color.setText(newSel.getColor());
-                input_Size.setText(newSel.getSize());
-                input_Cond.setText(newSel.getCondition());
-                input_Quan.setText(String.valueOf(newSel.getQuantity()));
-                input_Price.setText(String.valueOf(newSel.getPrice()));
+    // ================== DISCOUNT MANAGEMENT (Requirement 7) ==================
+
+    private void handleApplyDiscounts() {
+        try {
+            // Fixed discount: 30% Clothing (0.70), 20% Shoes (0.80), 50% Accessory (0.50)
+            productDAO.setDiscountPriceByCategory("Clothing", 0.70); // 30% off -> 70% price
+            productDAO.setDiscountPriceByCategory("Shoes", 0.80);    // 20% off -> 80% price
+            productDAO.setDiscountPriceByCategory("Accessory", 0.50); // 50% off -> 50% price
+
+            loadData();
+            showAlert(Alert.AlertType.INFORMATION, "Success", "Discounts applied according to requirements.");
+        } catch (SQLException e) {
+            showAlert(Alert.AlertType.ERROR, "DB Error", "Error applying discounts: " + e.getMessage());
+        }
+    }
+
+    private void handleClearDiscounts() {
+        try {
+            productDAO.clearAllDiscountPrices();
+            loadData();
+            showAlert(Alert.AlertType.INFORMATION, "Success", "All discounts have been cleared.");
+        } catch (SQLException e) {
+            showAlert(Alert.AlertType.ERROR, "DB Error", "Error clearing discounts: " + e.getMessage());
+        }
+    }
+
+    // ================== STATISTICS (Requirement 5) ==================
+
+    @FXML
+    public void refreshStats() {
+        try {
+            double income = productDAO.calculateIncome();
+            double cost = productDAO.calculateCost();
+            double capital = productDAO.calculateCapital(income, cost);
+
+            labelCapital.setText("Current Capital: " + String.format("%.2f €", capital));
+            labelIncomes.setText("Income: " + String.format("%.2f €", income));
+            labelCosts.setText("Costs: " + String.format("%.2f €", cost));
+
+            // Update capital color for aesthetics
+            if (capital < productDAO.getInitialCapital()) {
+                labelCapital.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #FF5733;"); // Red
+            } else {
+                labelCapital.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #00FF00;"); // Green
             }
-        });
 
-
+        } catch (SQLException e) {
+            showAlert(Alert.AlertType.ERROR, "Database Error", "Failed to calculate statistics.");
+        }
     }
 
-    private void handleReset() {
-        box_Cat.setValue(null);
-        input_Name.clear();
-        input_Type.clear();
-        input_Color.clear();
-        input_Size.clear();
-        input_Cond.clear();
-        input_Quan.clear();
-        input_Price.clear();
-    }
+    // ================== UTILITIES ==================
 
     private void showAlert(Alert.AlertType type, String title, String msg) {
         Alert a = new Alert(type);
