@@ -1,0 +1,125 @@
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS transactions;
+DROP TABLE IF EXISTS accessory;
+DROP TABLE IF EXISTS shoes;
+DROP TABLE IF EXISTS clothing;
+DROP TABLE IF EXISTS product;
+SET FOREIGN_KEY_CHECKS = 1;
+
+CREATE TABLE product (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    purchase_price DECIMAL(10,2) NOT NULL CHECK (purchase_price >= 0),
+    sale_price     DECIMAL(10,2) NOT NULL CHECK (sale_price >= 0),
+    discount_price DECIMAL(10,2) NOT NULL DEFAULT 0 CHECK (discount_price >= 0),
+    stock INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
+    status ENUM('Onstock','Soldout') NOT NULL DEFAULT 'Soldout',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE clothing (
+    product_id INT PRIMARY KEY,
+    size INT NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES product(id) ON DELETE CASCADE,
+    CHECK (size BETWEEN 34 AND 54)
+) ENGINE=InnoDB;
+
+CREATE TABLE shoes (
+    product_id INT PRIMARY KEY,
+    size INT NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES product(id) ON DELETE CASCADE,
+    CHECK (size BETWEEN 36 AND 50)
+) ENGINE=InnoDB;
+
+CREATE TABLE accessory (
+    product_id INT PRIMARY KEY,
+    material VARCHAR(50) DEFAULT NULL,
+    FOREIGN KEY (product_id) REFERENCES product(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE transactions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT NOT NULL,
+    type ENUM('BUY','SELL') NOT NULL,
+    quantity INT NOT NULL CHECK (quantity > 0),
+    price DECIMAL(10,2) NOT NULL CHECK (price >= 0),
+    total_price DECIMAL(12,2) GENERATED ALWAYS AS (price * quantity) VIRTUAL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (product_id) REFERENCES product(id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+DELIMITER //
+DROP TRIGGER IF EXISTS trg_prevent_saleprice_update;
+//
+CREATE TRIGGER trg_prevent_saleprice_update
+BEFORE UPDATE ON product
+FOR EACH ROW
+BEGIN
+    IF NEW.sale_price <> OLD.sale_price THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'sale_price cannot be modified';
+    END IF;
+END;
+//
+DELIMITER ;
+
+DELIMITER //
+DROP TRIGGER IF EXISTS trg_transactions_after_insert;
+//
+CREATE TRIGGER trg_transactions_after_insert
+AFTER INSERT ON transactions
+FOR EACH ROW
+BEGIN
+    IF NEW.type = 'BUY' THEN
+        UPDATE product
+        SET stock = stock + NEW.quantity,
+            status = IF(stock + NEW.quantity > 0, 'Onstock', 'Soldout')
+        WHERE id = NEW.product_id;
+    ELSEIF NEW.type = 'SELL' THEN
+        -- Vérifie stock disponible
+        IF (SELECT stock FROM product WHERE id = NEW.product_id) < NEW.quantity THEN
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Insufficient stock for SELL transaction';
+        END IF;
+        UPDATE product
+        SET stock = stock - NEW.quantity,
+            status = IF(stock - NEW.quantity > 0, 'Onstock', 'Soldout')
+        WHERE id = NEW.product_id;
+    END IF;
+END;
+//
+DELIMITER ;
+
+SET @initial_capital = 30000.00;
+
+DELETE FROM transactions;
+DELETE FROM clothing;
+DELETE FROM shoes;
+DELETE FROM accessory;
+DELETE FROM product;
+
+INSERT INTO product (name, purchase_price, sale_price)
+VALUES 
+('Dress 1', 70.00, 100.00),
+('Dress 2', 90.00, 120.00),
+('Shoe 1', 30.00, 50.00),
+('Shoe 2', 50.00, 70.00),
+('Accessory 1', 20.00, 30.00),
+('Accessory 2', 30.00, 40.00);
+
+-- Rattacher les tailles / tables filles
+INSERT INTO clothing (product_id, size)
+VALUES
+((SELECT id FROM product WHERE name='Dress 1'), 36),
+((SELECT id FROM product WHERE name='Dress 2'), 38);
+
+INSERT INTO shoes (product_id, size)
+VALUES
+((SELECT id FROM product WHERE name='Shoe 1'), 40),
+((SELECT id FROM product WHERE name='Shoe 2'), 42);
+
+INSERT INTO accessory (product_id, material)
+VALUES
+((SELECT id FROM product WHERE name='Accessory 1'), NULL),
+((SELECT id FROM product WHERE name='Accessory 2'), NULL);
+
+SELECT id, name, purchase_price, sale_price, discount_price, stock FROM product ORDER BY id;
